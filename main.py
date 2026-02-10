@@ -1,55 +1,29 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, Text, DateTime
-from sqlalchemy.orm import sessionmaker, declarative_base, Session
-from datetime import datetime
+import os
 from dotenv import load_dotenv
 from openai import OpenAI
+from ollama import chat 
+import json
 import requests
-import os
-
-
+  
 load_dotenv()
 
+
+
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
-NGROK_PUBLIC_URL = os.getenv("NGROK_PUBLIC_URL", "http://localhost:8000")
-
-
-DATABASE_URL = "sqlite:///./bonce.db"
-
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False}
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-class ChatHistory(Base):
-    __tablename__ = "chat_history"
-
-    id = Column(Integer, primary_key=True, index=True)
-    prompt = Column(Text, nullable=False)
-    response = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-Base.metadata.create_all(bind=engine)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+HF_TOKEN = os.getenv("HF_API_TOKEN")  
 
 client = OpenAI(
     base_url="https://ollama.com/v1",
-    api_key=OLLAMA_API_KEY,
+    api_key=OLLAMA_API_KEY,  
 )
 
+app = FastAPI()
 
-app = FastAPI(title="Bonce AI Backend")
+
+NGROK_PUBLIC_URL = os.getenv("NGROK_PUBLIC_URL", "http://localhost:8000")
 
 VIBE_SYSTEM_PROMPT = """
 You are a smart assistant for Bonce, an all-in-one digital marketing platform. 
@@ -86,6 +60,12 @@ Behavior:
 
 """
 
+SYSTEM_PROMPT = """
+You are a smart assistant specialized in tool-calling. 
+
+"""
+
+
 
 class TextRequest(BaseModel):
     prompt: str
@@ -93,49 +73,52 @@ class TextRequest(BaseModel):
 class ImageRequest(BaseModel):
     prompt: str
 
+class ToolRequest(BaseModel):
+    prompt: str
 
 
 @app.get("/config")
 def get_config():
-    return {"api_base_url": NGROK_PUBLIC_URL}
+    return {"api_base_url": NGROK_PUBLIC_URL or "http://127.0.0.1:8000"}
 
 
 @app.post("/generate-text")
-def generate_text(request: TextRequest, db: Session = Depends(get_db)):
-    response = client.chat.completions.create(
-        model="gpt-oss:120b-cloud",
-        messages=[
-            {"role": "system", "content": VIBE_SYSTEM_PROMPT},
-            {"role": "user", "content": request.prompt}
-        ],
-    )
-
-    ai_text = response.choices[0].message.content
-
-
-    chat = ChatHistory(
-        prompt=request.prompt,
-        response=ai_text
-    )
-    db.add(chat)
-    db.commit()
-
-    return {"response": ai_text}
+def generate_text(request: TextRequest):
+        response = client.chat.completions.create(
+            model="gpt-oss:120b-cloud",
+            messages=[
+                {"role": "system", "content": VIBE_SYSTEM_PROMPT},
+                {"role": "user", "content": request.prompt}
+            ],
+        )
+        return {"response": response.choices[0].message.content}
 
 
 @app.post("/generate-image")
 def generate_image(request: ImageRequest):
     try:
+
         response = requests.post(
             "https://overabusive-cortney-belly.ngrok-free.dev/generate-image",
             json={"prompt": request.prompt}
         )
-        return response.json()
-    except Exception as e:
-        return {"error": str(e)}
+        res = response.json()
+        return {"image": res}
+    except requests.RequestException as e:
+        print("Request failed:", e)
+        return {"error": "Failed to generate image"}
 
 
-@app.get("/history")
-def get_history(db: Session = Depends(get_db)):
-    chats = db.query(ChatHistory).order_by(ChatHistory.created_at.desc()).all()
-    return chats
+@app.post("/call-tool")
+def call_tool(request: ToolRequest):
+        resposne = client.chat.completions.create(
+            model="gpt-oss:120b-cloud",
+            messages=[
+                {"role": "system", "content": VIBE_SYSTEM_PROMPT},
+                {"role":"user","content": request.prompt}
+            ],
+        )
+        return {"response": resposne.choices[0].message.content}
+
+
+
