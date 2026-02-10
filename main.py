@@ -16,8 +16,8 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 HF_TOKEN = os.getenv("HF_API_TOKEN")  
 
 client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key="",  
+    base_url="https://ollama.com/v1",
+    api_key=OLLAMA_API_KEY,  
 )
 
 app = FastAPI()
@@ -84,30 +84,14 @@ def get_config():
 
 @app.post("/generate-text")
 def generate_text(request: TextRequest):
-    try:
         response = client.chat.completions.create(
-            model="moonshotai/kimi-k2.5",
-            max_tokens=300,
+            model="gpt-oss:120b-cloud",
             messages=[
                 {"role": "system", "content": VIBE_SYSTEM_PROMPT},
                 {"role": "user", "content": request.prompt}
             ],
         )
-        return {"response": response.choices[0].message.content.strip()}
-
-    except Exception as e_openrouter:
-        try:
-            cloud_response = chat(
-                model='gpt-oss:120b-cloud',
-                messages=[
-                    {'role': 'system', 'content': VIBE_SYSTEM_PROMPT},
-                    {"role": "user", "content": request.prompt}
-                ],
-            )
-            return {"response": cloud_response.message.content.strip()}
-
-        except Exception as e_cloud:
-            return {"error": f"OpenRouter error: {str(e_openrouter)}, Cloud GPT-OSS-120B error: {str(e_cloud)}"}
+        return {"response": response.choices[0].message.content}
 
 
 @app.post("/generate-image")
