@@ -112,17 +112,14 @@ def generate_image(request: ImageRequest):
 
 @app.post("/call-tool")
 def call_tool(request: ToolRequest):
-    try:
-        cloud_response = chat(
-            model="qwen3-next:80b-cloud",
+        resposne = client.chat.completions.create(
+            model="gpt-oss:120b-cloud",
             messages=[
-                {'role': 'system', 'content': SYSTEM_PROMPT},
-                {"role": "user", "content": request.prompt}
+                {"role": "system", "content": VIBE_SYSTEM_PROMPT},
+                {"role":"user","content": request.prompt}
             ],
         )
-        return {"response": cloud_response.message.content.strip()}
-    except Exception as e_cloud:
-        return {"error": f"Cloud Qwen3-Next-80B error: {str(e_cloud)}"}
+        return {"response": resposne.choices[0].message.content}
 
 
 
